@@ -20,7 +20,8 @@ pub fn create_table(conn: &Connection) -> anyhow::Result<()> {
                   id              INTEGER PRIMARY KEY,
                   job_id          INTEGER NOT NULL,
                   status          INTEGER NOT NULL,
-                  result          TEXT NOT NULL
+                  stdout          TEXT NOT NULL,
+                  stderr          TEXT NOT NULL
              )",
         [],
     )?;
@@ -31,6 +32,19 @@ pub fn insert_job(conn: &Connection, job: &schema::Job) -> Result<()> {
     conn.execute(
         "INSERT INTO jobs (name, script, run_at) VALUES (?1, ?2, ?3)",
         params![job.name, job.script, job.run_at],
+    )?;
+    Ok(())
+}
+
+pub fn insert_job_result(conn: &Connection, job_result: &schema::JobResult) -> Result<()> {
+    conn.execute(
+        "INSERT INTO job_results (job_id, status, stdout, stderr) VALUES (?1, ?2, ?3, ?4)",
+        params![
+            job_result.job_id,
+            job_result.status,
+            job_result.stdout,
+            job_result.stderr
+        ],
     )?;
     Ok(())
 }
@@ -53,13 +67,14 @@ pub fn select_jobs(conn: &Connection) -> Result<Vec<schema::Job>> {
 }
 
 pub fn select_job_results(conn: &Connection) -> Result<Vec<schema::JobResult>> {
-    let mut stmt = conn.prepare("SELECT id,job_id,status,result FROM job_results")?;
+    let mut stmt = conn.prepare("SELECT id,job_id,status,stdout,stderr FROM job_results")?;
     let job_results = stmt.query_map(params![], |row| {
         Ok(schema::JobResult {
             id: row.get(0)?,
             job_id: row.get(1)?,
             status: row.get(2)?,
-            result: row.get(3)?,
+            stdout: row.get(3)?,
+            stderr: row.get(4)?,
         })
     })?;
     let mut result = Vec::new();
