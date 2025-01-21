@@ -1,7 +1,4 @@
-use crate::{
-    create_table, get_job, get_job_result, insert_job, insert_job_result, schema, select_all_jobs,
-    select_queued_jobs,
-};
+use crate::{create_table, get_job, get_job_result, insert_job, insert_job_result, schema, select_all_jobs, select_queued_jobs, update_job_state};
 use chrono::{DateTime, Local};
 use clap::Args;
 use rusqlite::Connection;
@@ -98,10 +95,10 @@ impl Run {
 
         // sequentially run jobs
         while let Some(job) = pq.pop() {
-            let job = job.0;
+            let job = &job.0;
 
             let job_id = format!("#{}", job.id.to_string());
-            let job_name = job.name.unwrap_or(job_id.clone());
+            let job_name = job.name.clone().unwrap_or(job_id.clone());
             let wait_time = job.run_at - chrono::Utc::now();
 
             if wait_time.num_seconds() > 0 {
@@ -122,6 +119,7 @@ impl Run {
                 thread::sleep(wait_time);
             }
 
+            update_job_state(&conn, &job, schema::JobState::Doing)?;
             println!("Started job:{}", job_name);
             let output = std::process::Command::new("/bin/sh")
                 .arg("-c")
@@ -132,7 +130,8 @@ impl Run {
             job_result.status = output.status.code().map(|c| c as i16);
             job_result.stdout = String::from_utf8_lossy(&output.stdout).to_string();
             job_result.stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            insert_job_result(&conn, schema::JobState::Done, &job_result)?;
+            insert_job_result(&conn, &job_result)?;
+            update_job_state(&conn, &job, schema::JobState::Done)?;
             println!("done job:{}", job_name);
         }
 

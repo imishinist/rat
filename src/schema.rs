@@ -11,6 +11,7 @@ pub enum JobState {
     Queued = 0,
     Done = 1,
     Canceled = 2,
+    Doing = 3,
 }
 
 impl Display for JobState {
@@ -19,6 +20,7 @@ impl Display for JobState {
             JobState::Queued => write!(f, "Queued"),
             JobState::Done => write!(f, "Done"),
             JobState::Canceled => write!(f, "Canceled"),
+            JobState::Doing => write!(f, "Doing"),
         }
     }
 }
@@ -29,6 +31,7 @@ impl FromSql for JobState {
             0 => Ok(JobState::Queued),
             1 => Ok(JobState::Done),
             2 => Ok(JobState::Canceled),
+            3 => Ok(JobState::Doing),
             _ => Err(rusqlite::types::FromSqlError::InvalidType),
         }
     }
@@ -41,6 +44,7 @@ impl ToSql for JobState {
             JobState::Queued => Ok(ToSqlOutput::Owned(Integer(0))),
             JobState::Done => Ok(ToSqlOutput::Owned(Integer(1))),
             JobState::Canceled => Ok(ToSqlOutput::Owned(Integer(2))),
+            JobState::Doing => Ok(ToSqlOutput::Owned(Integer(3))),
         }
     }
 }

@@ -38,7 +38,12 @@ pub fn insert_job(conn: &Connection, job: &Job) -> Result<()> {
     Ok(())
 }
 
-pub fn insert_job_result(conn: &Connection, state: JobState, job_result: &JobResult) -> Result<()> {
+pub fn update_job_state(conn: &Connection, job: &Job, state: JobState) -> Result<()> {
+    conn.execute("UPDATE jobs SET state = ?1 WHERE id = ?2", params![state, job.id])?;
+    Ok(())
+}
+
+pub fn insert_job_result(conn: &Connection, job_result: &JobResult) -> Result<()> {
     conn.execute(
         "INSERT INTO job_results (job_id, status, stdout, stderr) VALUES (?1, ?2, ?3, ?4)",
         params![
@@ -47,10 +52,6 @@ pub fn insert_job_result(conn: &Connection, state: JobState, job_result: &JobRes
             job_result.stdout,
             job_result.stderr
         ],
-    )?;
-    conn.execute(
-        "UPDATE jobs SET state = ?1 WHERE id = ?2",
-        params![state, job_result.job_id],
     )?;
 
     Ok(())
