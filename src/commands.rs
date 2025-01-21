@@ -1,5 +1,5 @@
 use crate::{
-    create_table, get_job_result, insert_job, insert_job_result, schema, select_all_jobs,
+    create_table, get_job, get_job_result, insert_job, insert_job_result, schema, select_all_jobs,
     select_queued_jobs,
 };
 use chrono::{DateTime, Local};
@@ -135,6 +135,37 @@ impl Run {
             insert_job_result(&conn, schema::JobState::Done, &job_result)?;
             println!("done job:{}", job_name);
         }
+
+        Ok(())
+    }
+}
+
+#[derive(Args, Debug)]
+pub struct Log {
+    pub job_id: u16,
+}
+
+impl Log {
+    pub fn run(&self, base: BaseDirectories) -> anyhow::Result<()> {
+        let data_home = base.get_data_home();
+        let db_path = data_home.join("rat.db");
+        let conn = Connection::open(db_path)?;
+        create_table(&conn)?;
+
+        let job = get_job(&conn, self.job_id)?;
+        if job.is_none() {
+            eprintln!("Job not found");
+            return Ok(());
+        }
+        let job = job.unwrap();
+        let job_result = get_job_result(&conn, &job)?;
+        if job_result.is_none() {
+            eprintln!("Job result not found");
+            return Ok(());
+        }
+        let job_result = job_result.unwrap();
+        print!("{}", job_result.stdout);
+        eprint!("{}", job_result.stderr);
 
         Ok(())
     }

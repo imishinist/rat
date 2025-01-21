@@ -27,6 +27,7 @@ fn do_main() -> Result<()> {
         Commands::List(list) => list.run(base)?,
         Commands::Add(add) => add.run(base)?,
         Commands::Run(run) => run.run(base)?,
+        Commands::Log(log) => log.run(base)?,
     };
     Ok(())
 }
@@ -45,6 +46,7 @@ enum Commands {
     List(commands::List),
     Add(commands::Add),
     Run(commands::Run),
+    Log(commands::Log),
 }
 
 fn main() {

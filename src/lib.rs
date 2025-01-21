@@ -56,6 +56,23 @@ pub fn insert_job_result(conn: &Connection, state: JobState, job_result: &JobRes
     Ok(())
 }
 
+pub fn get_job(conn: &Connection, job_id: u16) -> Result<Option<Job>> {
+    let mut stmt = conn.prepare("SELECT id,name,state,script,run_at FROM jobs WHERE id = ?1")?;
+    let job = stmt
+        .query_map(params![job_id], |row| {
+            Ok(Job {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                state: row.get(2)?,
+                script: row.get(3)?,
+                run_at: row.get(4)?,
+            })
+        })?
+        .next()
+        .transpose()?;
+    Ok(job)
+}
+
 pub fn select_all_jobs(conn: &Connection) -> Result<Vec<Job>> {
     select_jobs(conn, None)
 }
