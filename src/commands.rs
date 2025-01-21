@@ -5,6 +5,7 @@ use rusqlite::Connection;
 use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::thread;
+use std::time::Duration;
 use xdg::BaseDirectories;
 
 #[derive(Args, Debug)]
@@ -64,7 +65,10 @@ impl Add {
 }
 
 #[derive(Args, Debug)]
-pub struct Run {}
+pub struct Run {
+    #[clap(short, long, value_parser = humantime::parse_duration)]
+    stop_early: Option<Duration>,
+}
 
 impl Run {
     pub fn run(&self, base: BaseDirectories) -> anyhow::Result<()> {
@@ -79,6 +83,8 @@ impl Run {
             pq.push(Reverse(job));
         }
 
+        let mut stop_early = self.stop_early;
+
         // sequentially run jobs
         while let Some(job) = pq.pop() {
             let job = job.0;
@@ -86,6 +92,14 @@ impl Run {
             let wait_time = job.run_at - chrono::Utc::now();
             if wait_time.num_seconds() < 0 {
                 continue;
+            }
+
+            if stop_early.is_some() {
+                let stop_early = stop_early.take().unwrap();
+                if wait_time.to_std()? > stop_early {
+                    println!("Stopping early");
+                    break;
+                }
             }
 
             let jobid = format!("#{}", job.id.to_string());
