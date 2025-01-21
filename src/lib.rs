@@ -1,3 +1,4 @@
+use crate::schema::{Job, JobResult, JobState};
 use rusqlite::{params, Connection};
 
 pub mod commands;
@@ -29,7 +30,7 @@ pub fn create_table(conn: &Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn insert_job(conn: &Connection, job: &schema::Job) -> Result<()> {
+pub fn insert_job(conn: &Connection, job: &Job) -> Result<()> {
     conn.execute(
         "INSERT INTO jobs (name, state, script, run_at) VALUES (?1, ?2, ?3, ?4)",
         params![job.name, job.state, job.script, job.run_at],
@@ -37,7 +38,7 @@ pub fn insert_job(conn: &Connection, job: &schema::Job) -> Result<()> {
     Ok(())
 }
 
-pub fn insert_job_result(conn: &Connection, state: schema::JobState, job_result: &schema::JobResult) -> Result<()> {
+pub fn insert_job_result(conn: &Connection, state: JobState, job_result: &JobResult) -> Result<()> {
     conn.execute(
         "INSERT INTO job_results (job_id, status, stdout, stderr) VALUES (?1, ?2, ?3, ?4)",
         params![
@@ -55,15 +56,15 @@ pub fn insert_job_result(conn: &Connection, state: schema::JobState, job_result:
     Ok(())
 }
 
-pub fn select_all_jobs(conn: &Connection) -> Result<Vec<schema::Job>> {
+pub fn select_all_jobs(conn: &Connection) -> Result<Vec<Job>> {
     select_jobs(conn, None)
 }
 
-pub fn select_queued_jobs(conn: &Connection) -> Result<Vec<schema::Job>> {
-    select_jobs(conn, Some(schema::JobState::Queued))
+pub fn select_queued_jobs(conn: &Connection) -> Result<Vec<Job>> {
+    select_jobs(conn, Some(JobState::Queued))
 }
 
-fn select_jobs(conn: &Connection, state: Option<schema::JobState>) -> Result<Vec<schema::Job>> {
+fn select_jobs(conn: &Connection, state: Option<JobState>) -> Result<Vec<Job>> {
     let (mut stmt, params) = match state {
         Some(state) => (
             conn.prepare("SELECT id,name,state,script,run_at FROM jobs WHERE state = ?1")?,
@@ -75,7 +76,7 @@ fn select_jobs(conn: &Connection, state: Option<schema::JobState>) -> Result<Vec
         ),
     };
     let jobs = stmt.query_map(params, |row| {
-        Ok(schema::Job {
+        Ok(Job {
             id: row.get(0)?,
             name: row.get(1)?,
             state: row.get(2)?,
@@ -90,10 +91,28 @@ fn select_jobs(conn: &Connection, state: Option<schema::JobState>) -> Result<Vec
     Ok(result)
 }
 
-pub fn select_job_results(conn: &Connection) -> Result<Vec<schema::JobResult>> {
+pub fn get_job_result(conn: &Connection, job: &Job) -> Result<Option<JobResult>> {
+    let mut stmt =
+        conn.prepare("SELECT id,status,stdout,stderr FROM job_results WHERE job_id = ?1")?;
+    let job_result = stmt
+        .query_map(params![job.id], |row| {
+            Ok(JobResult {
+                id: row.get(0)?,
+                job_id: job.id,
+                status: row.get(1)?,
+                stdout: row.get(2)?,
+                stderr: row.get(3)?,
+            })
+        })?
+        .next()
+        .transpose()?;
+    Ok(job_result)
+}
+
+pub fn select_job_results(conn: &Connection) -> Result<Vec<JobResult>> {
     let mut stmt = conn.prepare("SELECT id,job_id,status,stdout,stderr FROM job_results")?;
     let job_results = stmt.query_map(params![], |row| {
-        Ok(schema::JobResult {
+        Ok(JobResult {
             id: row.get(0)?,
             job_id: row.get(1)?,
             status: row.get(2)?,

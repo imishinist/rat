@@ -1,4 +1,7 @@
-use crate::{create_table, insert_job, insert_job_result, schema, select_all_jobs, select_queued_jobs};
+use crate::{
+    create_table, get_job_result, insert_job, insert_job_result, schema, select_all_jobs,
+    select_queued_jobs,
+};
 use chrono::{DateTime, Local};
 use clap::Args;
 use rusqlite::Connection;
@@ -22,11 +25,19 @@ impl List {
         let jobs = select_all_jobs(&conn)?;
         println!("ID\tName\tState\tScript\tRun At");
         for job in jobs {
+            let state = match job.state {
+                schema::JobState::Done => {
+                    let job_result = get_job_result(&conn, &job)?.unwrap();
+                    format!("({})", job_result.status.unwrap().to_string())
+                }
+                _ => "".to_string(),
+            };
             println!(
-                "{}\t{}\t{}\t{}\t{}",
+                "#{}\t{}\t{}{}\t{}\t{}",
                 job.id,
                 job.name.unwrap_or("".to_string()),
                 job.state,
+                state,
                 job.script,
                 job.run_at
             );

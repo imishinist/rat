@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
+use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
+use rusqlite::ToSql;
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Display, Formatter};
-use rusqlite::ToSql;
-use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 
 #[repr(C)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
