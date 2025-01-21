@@ -89,28 +89,29 @@ impl Run {
         while let Some(job) = pq.pop() {
             let job = job.0;
 
+            let job_id = format!("#{}", job.id.to_string());
+            let job_name = job.name.unwrap_or(job_id.clone());
             let wait_time = job.run_at - chrono::Utc::now();
-            if wait_time.num_seconds() < 0 {
-                continue;
-            }
 
-            if stop_early.is_some() {
-                let stop_early = stop_early.take().unwrap();
-                if wait_time.to_std()? > stop_early {
-                    println!("Stopping early");
-                    break;
+            if wait_time.num_seconds() > 0 {
+                let wait_time = wait_time.to_std()?;
+                if stop_early.is_some() {
+                    let stop_early = stop_early.take().unwrap();
+                    if wait_time > stop_early {
+                        println!("Stopping early");
+                        break;
+                    }
                 }
+
+                println!(
+                    "Job {} is due in {}",
+                    job_id,
+                    humantime::format_duration(wait_time)
+                );
+                thread::sleep(wait_time);
             }
 
-            let jobid = format!("#{}", job.id.to_string());
-            println!(
-                "Job {} is due in {} seconds",
-                jobid,
-                wait_time.num_seconds()
-            );
-            thread::sleep(wait_time.to_std()?);
-
-            println!("Running job: {}", job.name.unwrap_or(jobid));
+            println!("Started job:{}", job_name);
             let output = std::process::Command::new("/bin/sh")
                 .arg("-c")
                 .arg(&job.script)
@@ -121,6 +122,7 @@ impl Run {
             job_result.stdout = String::from_utf8_lossy(&output.stdout).to_string();
             job_result.stderr = String::from_utf8_lossy(&output.stderr).to_string();
             insert_job_result(&conn, schema::JobState::Done, &job_result)?;
+            println!("done job:{}", job_name);
         }
 
         Ok(())
