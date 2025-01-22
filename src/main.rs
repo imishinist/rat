@@ -50,6 +50,7 @@ enum Commands {
 }
 
 fn main() {
+    env_logger::init();
     if let Err(e) = do_main() {
         eprintln!("Error: {:?}", e);
     }

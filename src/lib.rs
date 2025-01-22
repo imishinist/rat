@@ -39,7 +39,10 @@ pub fn insert_job(conn: &Connection, job: &Job) -> Result<()> {
 }
 
 pub fn update_job_state(conn: &Connection, job: &Job, state: JobState) -> Result<()> {
-    conn.execute("UPDATE jobs SET state = ?1 WHERE id = ?2", params![state, job.id])?;
+    conn.execute(
+        "UPDATE jobs SET state = ?1 WHERE id = ?2",
+        params![state, job.id],
+    )?;
     Ok(())
 }
 

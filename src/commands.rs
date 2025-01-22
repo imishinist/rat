@@ -1,9 +1,10 @@
-use crate::{create_table, get_job, get_job_result, insert_job, insert_job_result, schema, select_all_jobs, select_queued_jobs, update_job_state};
+use crate::{
+    create_table, get_job, get_job_result, insert_job, insert_job_result, schema, select_all_jobs,
+    select_queued_jobs, update_job_state,
+};
 use chrono::{DateTime, Local};
 use clap::Args;
 use rusqlite::Connection;
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
 use std::thread;
 use std::time::Duration;
 use xdg::BaseDirectories;
@@ -85,42 +86,60 @@ impl Run {
         let conn = Connection::open(db_path)?;
         create_table(&conn)?;
 
-        let jobs = select_queued_jobs(&conn)?;
-        let mut pq = BinaryHeap::new();
-        for job in jobs {
-            pq.push(Reverse(job));
+        let interval = Duration::from_secs(1);
+        log::info!("interval: {:?}", interval);
+        loop {
+            self.run_job(&conn, interval)?;
         }
+    }
 
-        let mut stop_early = self.stop_early;
+    fn run_job(&self, conn: &Connection, interval: Duration) -> anyhow::Result<()> {
+        // TODO: order by run_at asc
+        let mut jobs = select_queued_jobs(&conn)?;
+        jobs.sort();
+        jobs.reverse();
 
-        // sequentially run jobs
-        while let Some(job) = pq.pop() {
-            let job = &job.0;
+        if jobs.is_empty() {
+            log::debug!("no jobs");
+            thread::sleep(interval);
+            return Ok(());
+        }
+        log::debug!("get {} jobs", jobs.len());
+
+        while let Some(job) = jobs.pop() {
+            log::info!("fetch job:#{}", job.id);
 
             let job_id = format!("#{}", job.id.to_string());
             let job_name = job.name.clone().unwrap_or(job_id.clone());
             let wait_time = job.run_at - chrono::Utc::now();
 
             if wait_time.num_seconds() > 0 {
-                let wait_time = wait_time.to_std()?;
-                if stop_early.is_some() {
-                    let stop_early = stop_early.take().unwrap();
-                    if wait_time > stop_early {
-                        println!("Stopping early");
-                        break;
-                    }
-                }
-
-                println!(
-                    "Job {} is due in {}",
-                    job_id,
-                    humantime::format_duration(wait_time)
+                log::info!(
+                    "wait {} seconds to start job:{}",
+                    wait_time.num_seconds(),
+                    job_id
                 );
+                let wait_time = wait_time.to_std().unwrap();
+                log::debug!(
+                    "wait {} seconds to start job:{}",
+                    wait_time.as_secs(),
+                    job_id
+                );
+
+                if wait_time > interval {
+                    log::debug!("sleep {} seconds", interval.as_secs());
+                    thread::sleep(interval);
+                    return Ok(());
+                }
+                log::debug!("sleep {} seconds", wait_time.as_secs());
                 thread::sleep(wait_time);
             }
 
             update_job_state(&conn, &job, schema::JobState::Doing)?;
-            println!("Started job:{}", job_name);
+            log::info!("update job state to Doing:{}", job_id);
+
+            log::info!("start job:{}", job_id);
+            println!("start job:{}", job_name);
             let output = std::process::Command::new("/bin/sh")
                 .arg("-c")
                 .arg(&job.script)
@@ -131,10 +150,11 @@ impl Run {
             job_result.stdout = String::from_utf8_lossy(&output.stdout).to_string();
             job_result.stderr = String::from_utf8_lossy(&output.stderr).to_string();
             insert_job_result(&conn, &job_result)?;
+            log::info!("insert job result:{}", job_id);
             update_job_state(&conn, &job, schema::JobState::Done)?;
+            log::info!("update job state to Done:{}", job_id);
             println!("done job:{}", job_name);
         }
-
         Ok(())
     }
 }
