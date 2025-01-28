@@ -1,10 +1,47 @@
 use crate::schema::{Job, JobResult, JobState};
 use rusqlite::{params, Connection};
+use std::path::{Path, PathBuf};
 
 pub mod commands;
 pub mod schema;
 
 pub type Result<T> = anyhow::Result<T>;
+
+#[cfg(unix)]
+fn path_to_bytes<P: AsRef<Path>>(path: P) -> Vec<u8> {
+    use std::os::unix::ffi::OsStrExt;
+    path.as_ref().as_os_str().as_bytes().to_vec()
+}
+
+#[cfg(unix)]
+fn bytes_to_path<S: AsRef<[u8]>>(buf: S) -> PathBuf {
+    use std::os::unix::ffi::OsStrExt;
+    PathBuf::from(std::ffi::OsStr::from_bytes(buf.as_ref()))
+}
+
+#[cfg(windows)]
+fn path_to_bytes<P: AsRef<Path>>(path: P) -> Vec<u8> {
+    // not tested
+    path.as_ref()
+        .as_os_str()
+        .encode_wide()
+        .map(|c| c.to_le_bytes())
+        .flatten()
+        .collect()
+}
+
+#[cfg(windows)]
+fn bytes_to_path(buf: &[u8]) -> PathBuf {
+    // not tested
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    OsString::from_wide(
+        buf.chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect::<Vec<u16>>(),
+    )
+    .into()
+}
 
 pub fn create_table(conn: &Connection) -> anyhow::Result<()> {
     conn.execute(
@@ -13,7 +50,8 @@ pub fn create_table(conn: &Connection) -> anyhow::Result<()> {
                   name            TEXT,
                   state           INTEGER NOT NULL,
                   script          TEXT NOT NULL,
-                  run_at          TEXT NOT NULL
+                  run_at          TEXT NOT NULL,
+                  cwd             BLOB NOT NULL
              )",
         [],
     )?;
@@ -32,8 +70,14 @@ pub fn create_table(conn: &Connection) -> anyhow::Result<()> {
 
 pub fn insert_job(conn: &Connection, job: &Job) -> Result<()> {
     conn.execute(
-        "INSERT INTO jobs (name, state, script, run_at) VALUES (?1, ?2, ?3, ?4)",
-        params![job.name, job.state, job.script, job.run_at],
+        "INSERT INTO jobs (name, state, script, run_at, cwd) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            job.name,
+            job.state,
+            job.script,
+            job.run_at,
+            path_to_bytes(&job.cwd)
+        ],
     )?;
     Ok(())
 }
@@ -61,7 +105,8 @@ pub fn insert_job_result(conn: &Connection, job_result: &JobResult) -> Result<()
 }
 
 pub fn get_job(conn: &Connection, job_id: u16) -> Result<Option<Job>> {
-    let mut stmt = conn.prepare("SELECT id,name,state,script,run_at FROM jobs WHERE id = ?1")?;
+    let mut stmt =
+        conn.prepare("SELECT id,name,state,script,run_at,cwd FROM jobs WHERE id = ?1")?;
     let job = stmt
         .query_map(params![job_id], |row| {
             Ok(Job {
@@ -70,6 +115,7 @@ pub fn get_job(conn: &Connection, job_id: u16) -> Result<Option<Job>> {
                 state: row.get(2)?,
                 script: row.get(3)?,
                 run_at: row.get(4)?,
+                cwd: bytes_to_path(row.get::<_, Vec<u8>>(5)?),
             })
         })?
         .next()
@@ -88,11 +134,11 @@ pub fn select_queued_jobs(conn: &Connection) -> Result<Vec<Job>> {
 fn select_jobs(conn: &Connection, state: Option<JobState>) -> Result<Vec<Job>> {
     let (mut stmt, params) = match state {
         Some(state) => (
-            conn.prepare("SELECT id,name,state,script,run_at FROM jobs WHERE state = ?1")?,
+            conn.prepare("SELECT id,name,state,script,run_at,cwd FROM jobs WHERE state = ?1")?,
             params![state.clone()],
         ),
         None => (
-            conn.prepare("SELECT id,name,state,script,run_at FROM jobs")?,
+            conn.prepare("SELECT id,name,state,script,run_at,cwd FROM jobs")?,
             params![],
         ),
     };
@@ -103,6 +149,7 @@ fn select_jobs(conn: &Connection, state: Option<JobState>) -> Result<Vec<Job>> {
             state: row.get(2)?,
             script: row.get(3)?,
             run_at: row.get(4)?,
+            cwd: bytes_to_path(row.get::<_, Vec<u8>>(5)?),
         })
     })?;
     let mut result = Vec::new();

@@ -4,6 +4,7 @@ use rusqlite::ToSql;
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
 
 #[repr(C)]
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
@@ -56,6 +57,7 @@ pub struct Job {
     pub state: JobState,
     pub script: String,
     pub run_at: DateTime<Utc>,
+    pub cwd: PathBuf,
 }
 
 impl PartialOrd<Self> for Job {

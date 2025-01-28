@@ -5,6 +5,7 @@ use crate::{
 use chrono::{DateTime, Local};
 use clap::Args;
 use rusqlite::Connection;
+use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 use xdg::BaseDirectories;
@@ -21,7 +22,7 @@ impl List {
         create_table(&conn)?;
 
         let jobs = select_all_jobs(&conn)?;
-        println!("ID\tName\tState\tScript\tRun At");
+        println!("ID\tName\tState\tScript\tRun At\tCurrent Directory");
         for job in jobs {
             let state = match job.state {
                 schema::JobState::Done => {
@@ -31,13 +32,14 @@ impl List {
                 _ => "".to_string(),
             };
             println!(
-                "#{}\t{}\t{}{}\t{}\t{}",
+                "#{}\t{}\t{}{}\t{}\t{}\t{:?}",
                 job.id,
                 job.name.unwrap_or("".to_string()),
                 job.state,
                 state,
                 job.script,
-                job.run_at
+                job.run_at,
+                job.cwd
             );
         }
         Ok(())
@@ -51,6 +53,8 @@ pub struct Add {
 
     pub run_at: DateTime<Local>,
     pub script: String,
+
+    pub cwd: Option<PathBuf>,
 }
 
 impl Add {
@@ -60,12 +64,16 @@ impl Add {
         let conn = Connection::open(db_path)?;
         create_table(&conn)?;
 
+        let cwd = std::env::current_dir()?;
+        let cwd = self.cwd.clone().unwrap_or(cwd);
+
         let job = schema::Job {
             id: 0,
             name: self.name.clone(),
             state: schema::JobState::Queued,
             script: self.script.clone(),
             run_at: self.run_at.to_utc(),
+            cwd,
         };
         insert_job(&conn, &job)?;
 
@@ -143,6 +151,7 @@ impl Run {
             let output = std::process::Command::new("/bin/sh")
                 .arg("-c")
                 .arg(&job.script)
+                .current_dir(&job.cwd)
                 .output()?;
 
             let mut job_result = schema::JobResult::new(job.id);
