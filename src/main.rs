@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use rat::{commands, Result};
-use std::path::PathBuf;
 use xdg::BaseDirectories;
 
 fn setup_directories(base: &BaseDirectories) -> Result<()> {
@@ -34,9 +33,6 @@ fn do_main() -> Result<()> {
 
 #[derive(Parser, Debug)]
 struct Rat {
-    #[clap(short, long, default_value = "/tmp/rat.db")]
-    directory: PathBuf,
-
     #[command(subcommand)]
     commands: Commands,
 }
@@ -52,6 +48,10 @@ enum Commands {
 fn main() {
     env_logger::init();
     if let Err(e) = do_main() {
-        eprintln!("Error: {:?}", e);
+        eprintln!("error: {}", e);
+
+        for err in e.chain().skip(1) {
+            eprintln!("\tcaused by: {:?}", err);
+        }
     }
 }
