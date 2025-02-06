@@ -194,3 +194,12 @@ pub fn select_job_results(conn: &Connection) -> Result<Vec<JobResult>> {
     }
     Ok(result)
 }
+
+pub fn delete_job(conn: &mut Connection, job: &Job) -> Result<()> {
+    let tx = conn.transaction()?;
+    tx.execute("DELETE FROM job_results WHERE job_id = ?1", params![job.id])?;
+    tx.execute("DELETE FROM jobs WHERE id = ?1", params![job.id])?;
+    tx.commit()?;
+
+    Ok(())
+}

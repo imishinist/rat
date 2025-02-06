@@ -25,6 +25,7 @@ fn do_main() -> Result<()> {
     match args.commands {
         Commands::List(list) => list.run(base)?,
         Commands::Add(add) => add.run(base)?,
+        Commands::Delete(delete) => delete.run(base)?,
         Commands::Run(run) => run.run(base)?,
         Commands::Log(log) => log.run(base)?,
     };
@@ -41,6 +42,7 @@ struct Rat {
 enum Commands {
     List(commands::List),
     Add(commands::Add),
+    Delete(commands::Delete),
     Run(commands::Run),
     Log(commands::Log),
 }

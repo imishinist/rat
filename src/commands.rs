@@ -1,26 +1,32 @@
-use crate::{
-    create_table, get_job, get_job_result, insert_job, insert_job_result, schema, select_all_jobs,
-    select_queued_jobs, update_job_state,
-};
-use chrono::{DateTime, Local};
-use clap::Args;
-use rusqlite::Connection;
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
+
+use anyhow::Context;
+use chrono::{DateTime, Local};
+use clap::Args;
+use rusqlite::Connection;
 use xdg::BaseDirectories;
+
+use crate::{
+    create_table, delete_job, get_job, get_job_result, insert_job, insert_job_result, schema,
+    select_all_jobs, select_queued_jobs, update_job_state,
+};
+
+fn setup_db(base: &BaseDirectories) -> anyhow::Result<Connection> {
+    let data_home = base.get_data_home();
+    let db_path = data_home.join("rat.db");
+    let conn = Connection::open(db_path)?;
+    create_table(&conn)?;
+    Ok(conn)
+}
 
 #[derive(Args, Debug)]
 pub struct List {}
 
 impl List {
     pub fn run(&self, base: BaseDirectories) -> anyhow::Result<()> {
-        let data_home = base.get_data_home();
-        let db_path = data_home.join("rat.db");
-        let conn = Connection::open(db_path)?;
-
-        create_table(&conn)?;
-
+        let conn = setup_db(&base)?;
         let jobs = select_all_jobs(&conn)?;
         println!("ID\tName\tState\tScript\tRun At\tCurrent Directory");
         for job in jobs {
@@ -59,10 +65,7 @@ pub struct Add {
 
 impl Add {
     pub fn run(&self, base: BaseDirectories) -> anyhow::Result<()> {
-        let data_home = base.get_data_home();
-        let db_path = data_home.join("rat.db");
-        let conn = Connection::open(db_path)?;
-        create_table(&conn)?;
+        let conn = setup_db(&base)?;
 
         let cwd = std::env::current_dir()?;
         let cwd = self.cwd.clone().unwrap_or(cwd);
@@ -82,6 +85,28 @@ impl Add {
 }
 
 #[derive(Args, Debug)]
+pub struct Delete {
+    pub job_id: u16,
+}
+
+impl Delete {
+    pub fn run(&self, base: BaseDirectories) -> anyhow::Result<()> {
+        let mut conn = setup_db(&base)?;
+        let Some(job) = get_job(&conn, self.job_id).context("failed to get job")? else {
+            eprintln!("job #{} not found", self.job_id);
+            std::process::exit(1);
+        };
+        if job.state == schema::JobState::Doing {
+            eprintln!("job #{} is running", self.job_id);
+            std::process::exit(1);
+        }
+
+        let _ = delete_job(&mut conn, &job).context("failed to delete job")?;
+        Ok(())
+    }
+}
+
+#[derive(Args, Debug)]
 pub struct Run {
     #[clap(short, long, value_parser = humantime::parse_duration)]
     stop_early: Option<Duration>,
@@ -89,11 +114,7 @@ pub struct Run {
 
 impl Run {
     pub fn run(&self, base: BaseDirectories) -> anyhow::Result<()> {
-        let data_home = base.get_data_home();
-        let db_path = data_home.join("rat.db");
-        let conn = Connection::open(db_path)?;
-        create_table(&conn)?;
-
+        let conn = setup_db(&base)?;
         let interval = Duration::from_secs(1);
         log::info!("interval: {:?}", interval);
         loop {
@@ -175,10 +196,7 @@ pub struct Log {
 
 impl Log {
     pub fn run(&self, base: BaseDirectories) -> anyhow::Result<()> {
-        let data_home = base.get_data_home();
-        let db_path = data_home.join("rat.db");
-        let conn = Connection::open(db_path)?;
-        create_table(&conn)?;
+        let conn = setup_db(&base)?;
 
         let job = get_job(&conn, self.job_id)?;
         if job.is_none() {
