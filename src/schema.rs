@@ -158,15 +158,15 @@ impl JobBuilder<Present, Present, Present> {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct JobID(i64);
+pub struct ID(i64);
 
-impl Display for JobID {
+impl Display for ID {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "#{}", self.0)
     }
 }
 
-impl Deref for JobID {
+impl Deref for ID {
     type Target = i64;
 
     fn deref(&self) -> &Self::Target {
@@ -174,19 +174,19 @@ impl Deref for JobID {
     }
 }
 
-impl From<i64> for JobID {
+impl From<i64> for ID {
     fn from(id: i64) -> Self {
         Self(id)
     }
 }
 
-impl FromSql for JobID {
+impl FromSql for ID {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        Ok(JobID(value.as_i64()?))
+        Ok(ID(value.as_i64()?))
     }
 }
 
-impl ToSql for JobID {
+impl ToSql for ID {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
         self.0.to_sql()
     }
@@ -194,7 +194,7 @@ impl ToSql for JobID {
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Job {
-    pub id: JobID,
+    pub id: ID,
     pub name: Option<String>,
     pub state: JobState,
     pub script: String,
@@ -216,8 +216,8 @@ impl Ord for Job {
 
 #[derive(Debug)]
 pub struct JobResult {
-    pub id: i64,
-    pub job_id: JobID,
+    pub id: ID,
+    pub job_id: ID,
     pub status: Option<i16>,
 
     pub stdout: String,
@@ -225,10 +225,10 @@ pub struct JobResult {
 }
 
 impl JobResult {
-    pub fn new(job_id: impl Into<JobID>) -> Self {
+    pub fn new(job_id: impl Into<ID>) -> Self {
         let job_id = job_id.into();
         Self {
-            id: 0,
+            id: 0.into(),
             job_id,
             status: None,
             stdout: String::new(),

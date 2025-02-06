@@ -95,7 +95,7 @@ impl Delete {
         let mut job_manager = job_manager;
 
         let Some(job) = job_manager
-            .get_job(self.job_id)
+            .get_job(self.job_id.into())
             .context("failed to get job")?
         else {
             eprintln!("job {} not found", self.job_id);
@@ -170,7 +170,7 @@ impl Run {
         job_result.status = output.status.code().map(|c| c as i16);
         job_result.stdout = String::from_utf8_lossy(&output.stdout).to_string();
         job_result.stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        job_manager.save_job_result(&job_result)?;
+        let _ = job_manager.save_job_result(job_result)?;
         log::info!("insert job result:{}", job_id);
 
         job_manager.update_job_state(&job, schema::JobState::Done)?;
@@ -189,7 +189,7 @@ pub struct Log {
 impl Log {
     pub fn run(&self, job_manager: JobManager) -> anyhow::Result<()> {
         let Some(job) = job_manager
-            .get_job(self.job_id)
+            .get_job(self.job_id.into())
             .context("failed to get job")?
         else {
             eprintln!("job {} not found", self.job_id);
