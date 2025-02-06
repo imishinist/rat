@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use rat::{commands, Result};
+use rat::{commands, JobManager, Result};
 use xdg::BaseDirectories;
 
 fn setup_directories(base: &BaseDirectories) -> Result<()> {
@@ -22,12 +22,15 @@ fn do_main() -> Result<()> {
 
     let base = BaseDirectories::with_prefix("rat")?;
     setup_directories(&base)?;
+
+    let data_home = base.get_data_home();
+    let job_manager = JobManager::new(data_home)?;
     match args.commands {
-        Commands::List(list) => list.run(base)?,
-        Commands::Add(add) => add.run(base)?,
-        Commands::Delete(delete) => delete.run(base)?,
-        Commands::Run(run) => run.run(base)?,
-        Commands::Log(log) => log.run(base)?,
+        Commands::List(list) => list.run(job_manager)?,
+        Commands::Add(add) => add.run(job_manager)?,
+        Commands::Delete(delete) => delete.run(job_manager)?,
+        Commands::Run(run) => run.run(job_manager)?,
+        Commands::Log(log) => log.run(job_manager)?,
     };
     Ok(())
 }
