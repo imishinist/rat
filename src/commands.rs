@@ -5,6 +5,7 @@ use std::time::Duration;
 use anyhow::Context;
 use chrono::{DateTime, Local, Utc};
 use clap::Args;
+use prettytable::{format, row, Table};
 
 use crate::{
     schema::{self, JobBuilder},
@@ -17,7 +18,11 @@ pub struct List {}
 impl List {
     pub fn run(&self, job_manager: JobManager) -> anyhow::Result<()> {
         let jobs = job_manager.get_all_jobs()?;
-        println!("ID\tName\tState\tScript\tRun At\tCurrent Directory");
+
+        let mut table = Table::new();
+        table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
+
+        table.set_titles(row!["ID", "Name", "State", "Script", "Run At"]);
         for job in jobs {
             let state = match job.state {
                 schema::JobState::Done => {
@@ -35,17 +40,15 @@ impl List {
                 }
                 _ => "".to_string(),
             };
-            println!(
-                "{}\t{}\t{}{}\t{}\t{}\t{:?}",
+            table.add_row(row![
                 job.id,
                 job.name.unwrap_or("".to_string()),
-                job.state,
-                state,
+                format!("{}{}", job.state, state),
                 job.script,
                 job.run_at,
-                job.cwd
-            );
+            ]);
         }
+        table.printstd();
         Ok(())
     }
 }
