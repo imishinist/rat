@@ -94,10 +94,12 @@ pub fn select_job(conn: &Connection, job_id: ID) -> Result<Option<Job>> {
 }
 
 pub fn update_job_state(conn: &mut Connection, job: &Job, state: JobState) -> Result<()> {
-    conn.execute(
+    let tx = conn.transaction()?;
+    tx.execute(
         "UPDATE jobs SET state = ?1 WHERE id = ?2",
         params![state, job.id],
     )?;
+    tx.commit()?;
     Ok(())
 }
 

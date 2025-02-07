@@ -1,4 +1,6 @@
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -119,11 +121,19 @@ impl Run {
     pub fn run(&self, job_manager: JobManager) -> anyhow::Result<()> {
         let mut job_manager = job_manager;
 
+        let running = Arc::new(AtomicBool::new(true));
+
+        let r = running.clone();
+        ctrlc::set_handler(move || {
+            r.store(false, Ordering::SeqCst);
+        })?;
+
         let interval = Duration::from_secs(1);
         log::info!("interval: {:?}", interval);
-        loop {
+        while running.load(Ordering::SeqCst) {
             self.run_job(&mut job_manager, interval)?;
         }
+        Ok(())
     }
 
     fn run_job(&self, job_manager: &mut JobManager, interval: Duration) -> anyhow::Result<()> {
