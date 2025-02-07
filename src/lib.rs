@@ -27,13 +27,9 @@ impl JobManager {
     }
 
     pub fn dequeue(&mut self) -> Result<Option<JobGuard>> {
-        let mut jobs = db::select_queued_jobs(&self.conn)?;
-        jobs.sort_by(|a, b| a.run_at.cmp(&b.run_at).reverse());
-
-        let Some(job) = jobs.pop() else {
+        let Some(job) = db::dequeue_job(&self.conn)? else {
             return Ok(None);
         };
-
         let guard = JobGuard::new(job, self)?;
         Ok(Some(guard))
     }

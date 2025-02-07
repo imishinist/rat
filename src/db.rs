@@ -28,8 +28,24 @@ pub fn create_table(conn: &Connection) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn select_queued_jobs(conn: &Connection) -> Result<Vec<Job>> {
-    select_jobs(conn, Some(JobState::Queued))
+pub fn dequeue_job(conn: &Connection) -> Result<Option<Job>> {
+    let mut stmt =
+        conn.prepare("SELECT id,name,state,script,run_at,cwd FROM jobs WHERE state = ?1 ORDER BY run_at ASC LIMIT 1")?;
+    let job = stmt
+        .query_map(params![JobState::Queued], |row| {
+            let id: i64 = row.get(0)?;
+            Ok(Job {
+                id: id.into(),
+                name: row.get(1)?,
+                state: row.get(2)?,
+                script: row.get(3)?,
+                run_at: row.get(4)?,
+                cwd: bytes_to_path(row.get::<_, Vec<u8>>(5)?),
+            })
+        })?
+        .next()
+        .transpose()?;
+    Ok(job)
 }
 
 pub fn insert_job(conn: &mut Connection, job: &Job) -> Result<ID> {
