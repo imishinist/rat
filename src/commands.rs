@@ -1,11 +1,12 @@
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
 use anyhow::Context;
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Local, SubsecRound, Utc};
 use clap::Args;
 use prettytable::{format, row, Table};
 
@@ -55,11 +56,23 @@ impl List {
     }
 }
 
+fn parse_datetime(s: &str) -> anyhow::Result<DateTime<Local>> {
+    // try humantime
+    if let Ok(std_dur) = humantime::parse_duration(s) {
+        let dur = chrono::Duration::from_std(std_dur)?;
+        let now = Local::now().trunc_subsecs(0);
+        return Ok(now + dur);
+    }
+
+    Ok(DateTime::from_str(s)?)
+}
+
 #[derive(Args, Debug)]
 pub struct Add {
     #[clap(short, long)]
     pub name: Option<String>,
 
+    #[arg(value_parser=parse_datetime)]
     pub run_at: DateTime<Local>,
     pub script: String,
 
