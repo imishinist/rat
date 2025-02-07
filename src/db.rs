@@ -55,6 +55,10 @@ pub fn insert_job_result(conn: &mut Connection, job_result: &JobResult) -> Resul
     let tx = conn.transaction()?;
 
     tx.execute(
+        "UPDATE jobs SET state = ?1 WHERE id = ?2",
+        params![JobState::Done, job_result.job_id],
+    )?;
+    tx.execute(
         "INSERT INTO job_results (job_id, status, stdout, stderr) VALUES (?1, ?2, ?3, ?4)",
         params![
             job_result.job_id,

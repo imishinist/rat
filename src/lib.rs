@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
@@ -25,10 +26,16 @@ impl JobManager {
         Ok(JobManager { conn })
     }
 
-    pub fn dequeue(&mut self) -> Result<Option<Job>> {
+    pub fn dequeue(&mut self) -> Result<Option<JobGuard>> {
         let mut jobs = db::select_queued_jobs(&self.conn)?;
         jobs.sort_by(|a, b| a.run_at.cmp(&b.run_at).reverse());
-        Ok(jobs.pop())
+
+        let Some(job) = jobs.pop() else {
+            return Ok(None);
+        };
+
+        let guard = JobGuard::new(job, self)?;
+        Ok(Some(guard))
     }
 
     pub fn enqueue(&mut self, mut job: Job) -> Result<Job> {
@@ -37,24 +44,12 @@ impl JobManager {
         Ok(job)
     }
 
-    pub fn save_job_result(&mut self, job_result: JobResult) -> Result<JobResult> {
-        let job_result_id = db::insert_job_result(&mut self.conn, &job_result)?;
-        Ok(JobResult {
-            id: job_result_id.into(),
-            ..job_result
-        })
-    }
-
     pub fn get_job(&self, job_id: ID) -> Result<Option<Job>> {
         db::select_job(&self.conn, job_id)
     }
 
-    pub fn update_job_state(&mut self, job: &Job, state: JobState) -> Result<()> {
-        db::update_job_state(&mut self.conn, job, state)
-    }
-
     pub fn delete(&mut self, job: &Job) -> Result<()> {
-        if job.state == JobState::Doing {
+        if job.state == JobState::Running {
             return Err(anyhow::anyhow!(
                 "cannot delete a job #{} that is currently running",
                 job.id
@@ -106,4 +101,56 @@ fn bytes_to_path(buf: &[u8]) -> PathBuf {
             .collect::<Vec<u16>>(),
     )
     .into()
+}
+
+pub struct JobGuard<'m> {
+    job: Job,
+    manager: &'m mut JobManager,
+
+    done: bool,
+}
+
+impl<'m> JobGuard<'m> {
+    fn new(job: Job, manager: &'m mut JobManager) -> Result<Self> {
+        let mut job_guard = JobGuard {
+            job,
+            manager,
+            done: false,
+        };
+        job_guard.set_state(JobState::Dequeued)?;
+        Ok(job_guard)
+    }
+
+    pub fn mark_running(&mut self) -> Result<()> {
+        self.set_state(JobState::Running)
+    }
+
+    fn set_state(&mut self, state: JobState) -> Result<()> {
+        db::update_job_state(&mut self.manager.conn, &self.job, state)
+    }
+
+    pub fn save_job_result(&mut self, job_result: JobResult) -> Result<JobResult> {
+        let job_result_id = db::insert_job_result(&mut self.manager.conn, &job_result)?;
+        self.done = true;
+        Ok(JobResult {
+            id: job_result_id.into(),
+            ..job_result
+        })
+    }
+}
+
+impl Deref for JobGuard<'_> {
+    type Target = Job;
+
+    fn deref(&self) -> &Self::Target {
+        &self.job
+    }
+}
+
+impl Drop for JobGuard<'_> {
+    fn drop(&mut self) {
+        if !self.done {
+            let _ = self.set_state(JobState::Queued);
+        }
+    }
 }

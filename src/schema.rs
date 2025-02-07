@@ -13,18 +13,20 @@ use rusqlite::ToSql;
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
 pub enum JobState {
     Queued = 0,
-    Done = 1,
-    Canceled = 2,
-    Doing = 3,
+    Dequeued = 1,
+    Running = 2,
+    Done = 3,
+    Canceled = 4,
 }
 
 impl Display for JobState {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
             JobState::Queued => write!(f, "Queued"),
+            JobState::Dequeued => write!(f, "Dequeued"),
+            JobState::Running => write!(f, "Running"),
             JobState::Done => write!(f, "Done"),
             JobState::Canceled => write!(f, "Canceled"),
-            JobState::Doing => write!(f, "Doing"),
         }
     }
 }
@@ -33,9 +35,10 @@ impl FromSql for JobState {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match value.as_i64()? {
             0 => Ok(JobState::Queued),
-            1 => Ok(JobState::Done),
-            2 => Ok(JobState::Canceled),
-            3 => Ok(JobState::Doing),
+            1 => Ok(JobState::Dequeued),
+            2 => Ok(JobState::Running),
+            3 => Ok(JobState::Done),
+            4 => Ok(JobState::Canceled),
             _ => Err(rusqlite::types::FromSqlError::InvalidType),
         }
     }
@@ -44,12 +47,8 @@ impl FromSql for JobState {
 impl ToSql for JobState {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
         use rusqlite::types::Value::Integer;
-        match *self {
-            JobState::Queued => Ok(ToSqlOutput::Owned(Integer(0))),
-            JobState::Done => Ok(ToSqlOutput::Owned(Integer(1))),
-            JobState::Canceled => Ok(ToSqlOutput::Owned(Integer(2))),
-            JobState::Doing => Ok(ToSqlOutput::Owned(Integer(3))),
-        }
+        let state = *self as i64;
+        Ok(ToSqlOutput::Owned(Integer(state)))
     }
 }
 

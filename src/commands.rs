@@ -158,8 +158,9 @@ impl Run {
             thread::sleep(wait_time);
         }
 
-        job_manager.update_job_state(&job, schema::JobState::Doing)?;
-        log::info!("update job state to Doing:{}", job_id);
+        let mut job = job;
+        job.mark_running()?;
+        log::info!("update job state to Running:{}", job_id);
 
         log::info!("start job:{}", job_id);
         println!("start job:{}", job_id);
@@ -173,10 +174,9 @@ impl Run {
         job_result.status = output.status.code().map(|c| c as i16);
         job_result.stdout = String::from_utf8_lossy(&output.stdout).to_string();
         job_result.stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        let _ = job_manager.save_job_result(job_result)?;
-        log::info!("insert job result:{}", job_id);
 
-        job_manager.update_job_state(&job, schema::JobState::Done)?;
+        let _ = job.save_job_result(job_result)?;
+        log::info!("insert job result:{}", job_id);
         log::info!("update job state to Done:{}", job_id);
         println!("done job:{}", job_id);
 
