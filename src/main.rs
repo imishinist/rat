@@ -28,6 +28,7 @@ fn do_main() -> Result<()> {
     match args.commands {
         Commands::List(list) => list.run(job_manager)?,
         Commands::Add(add) => add.run(job_manager)?,
+        Commands::Cancel(cancel) => cancel.run(job_manager)?,
         Commands::Delete(delete) => delete.run(job_manager)?,
         Commands::Run(run) => run.run(job_manager)?,
         Commands::Log(log) => log.run(job_manager)?,
@@ -45,6 +46,7 @@ struct Rat {
 enum Commands {
     List(commands::List),
     Add(commands::Add),
+    Cancel(commands::Cancel),
     Delete(commands::Delete),
     Run(commands::Run),
     Log(commands::Log),

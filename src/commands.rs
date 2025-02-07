@@ -1,6 +1,6 @@
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -86,6 +86,32 @@ impl Add {
         let job = job_builder.build();
         let job = job_manager.enqueue(job)?;
         println!("add job {}", job.id);
+        Ok(())
+    }
+}
+
+#[derive(Args, Debug)]
+pub struct Cancel {
+    pub job_id: i64,
+}
+
+impl Cancel {
+    pub fn run(&self, job_manager: JobManager) -> anyhow::Result<()> {
+        let mut job_manager = job_manager;
+
+        let Some(job) = job_manager
+            .get_job_mut(self.job_id.into())
+            .context("failed to get job")?
+        else {
+            eprintln!("job {} not found", self.job_id);
+            std::process::exit(1);
+        };
+        if job.state != schema::JobState::Queued && job.state != schema::JobState::Dequeued {
+            eprintln!("job {} is not queued", self.job_id);
+            std::process::exit(1);
+        }
+        let mut job = job;
+        job.cancel()?;
         Ok(())
     }
 }

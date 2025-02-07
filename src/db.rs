@@ -30,7 +30,7 @@ pub fn create_table(conn: &Connection) -> anyhow::Result<()> {
 
 pub fn dequeue_job(conn: &Connection) -> Result<Option<Job>> {
     let mut stmt =
-        conn.prepare("SELECT id,name,state,script,run_at,cwd FROM jobs WHERE state = ?1 ORDER BY run_at ASC LIMIT 1")?;
+        conn.prepare("SELECT id,name,state,script,run_at,cwd FROM jobs WHERE state = ?1 ORDER BY run_at ASC, id ASC LIMIT 1")?;
     let job = stmt
         .query_map(params![JobState::Queued], |row| {
             let id: i64 = row.get(0)?;
@@ -109,12 +109,32 @@ pub fn select_job(conn: &Connection, job_id: ID) -> Result<Option<Job>> {
     Ok(job)
 }
 
-pub fn update_job_state(conn: &mut Connection, job: &Job, state: JobState) -> Result<()> {
+pub fn update_job_state(
+    conn: &mut Connection,
+    job: &Job,
+    state: JobState,
+    cond_state: Option<JobState>,
+) -> Result<()> {
     let tx = conn.transaction()?;
-    tx.execute(
-        "UPDATE jobs SET state = ?1 WHERE id = ?2",
-        params![state, job.id],
-    )?;
+    let rows_affected = if let Some(cond_state) = cond_state {
+        tx.execute(
+            "UPDATE jobs SET state = ?1 WHERE id = ?2 AND state = ?3",
+            params![state, job.id, cond_state],
+        )?
+    } else {
+        tx.execute(
+            "UPDATE jobs SET state = ?1 WHERE id = ?2",
+            params![state, job.id],
+        )?
+    };
+    if rows_affected == 0 {
+        return Err(anyhow::anyhow!(
+            "job {} state is not {}",
+            job.id,
+            cond_state.unwrap_or(state)
+        ));
+    }
+
     tx.commit()?;
     Ok(())
 }

@@ -30,7 +30,9 @@ impl JobManager {
         let Some(job) = db::dequeue_job(&self.conn)? else {
             return Ok(None);
         };
-        let guard = JobGuard::new(job, self)?;
+        let mut guard = JobGuard::new(job, self)?;
+        guard.set_state(JobState::Dequeued, None)?;
+
         Ok(Some(guard))
     }
 
@@ -42,6 +44,15 @@ impl JobManager {
 
     pub fn get_job(&self, job_id: ID) -> Result<Option<Job>> {
         db::select_job(&self.conn, job_id)
+    }
+
+    pub fn get_job_mut(&mut self, job_id: ID) -> Result<Option<JobGuard>> {
+        let Some(job) = db::select_job(&self.conn, job_id)? else {
+            return Ok(None);
+        };
+
+        let guard = JobGuard::new(job, self)?;
+        Ok(Some(guard))
     }
 
     pub fn delete(&mut self, job: &Job) -> Result<()> {
@@ -108,21 +119,24 @@ pub struct JobGuard<'m> {
 
 impl<'m> JobGuard<'m> {
     fn new(job: Job, manager: &'m mut JobManager) -> Result<Self> {
-        let mut job_guard = JobGuard {
+        Ok(JobGuard {
             job,
             manager,
             done: false,
-        };
-        job_guard.set_state(JobState::Dequeued)?;
-        Ok(job_guard)
+        })
     }
 
     pub fn mark_running(&mut self) -> Result<()> {
-        self.set_state(JobState::Running)
+        self.set_state(JobState::Running, None)
     }
 
-    fn set_state(&mut self, state: JobState) -> Result<()> {
-        db::update_job_state(&mut self.manager.conn, &self.job, state)
+    pub fn cancel(&mut self) -> Result<()> {
+        self.done = true;
+        self.set_state(JobState::Canceled, None)
+    }
+
+    fn set_state(&mut self, state: JobState, cond_state: Option<JobState>) -> Result<()> {
+        db::update_job_state(&mut self.manager.conn, &self.job, state, cond_state)
     }
 
     pub fn save_job_result(&mut self, job_result: JobResult) -> Result<JobResult> {
@@ -146,7 +160,7 @@ impl Deref for JobGuard<'_> {
 impl Drop for JobGuard<'_> {
     fn drop(&mut self) {
         if !self.done {
-            let _ = self.set_state(JobState::Queued);
+            let _ = self.set_state(JobState::Queued, Some(JobState::Dequeued));
         }
     }
 }
